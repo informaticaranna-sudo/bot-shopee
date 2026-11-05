@@ -145,6 +145,18 @@ http.createServer(async (req, res) => {
       const c = loadCfg();
       return send(res, 200, { ok: true, configured: !!(c.appId && c.secret), appId: mask(c.appId) });
     }
+    if (req.method === 'GET' && url.pathname === '/api/imagem') {
+      const u = url.searchParams.get('u') || '';
+      let h = '';
+      try { h = new URL(u).hostname; } catch {}
+      if (!/^https:\/\//.test(u) || !/(^|\.)(susercontent\.com|shopee\.com\.br|shopee\.com)$/.test(h)) return send(res, 400, { erro: 'Imagem não permitida' });
+      const r = await fetch(u, { headers: { 'user-agent': UA }, redirect: 'error' });
+      if (!r.ok) return send(res, 400, { erro: 'Não consegui baixar a imagem' });
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 8e6) return send(res, 400, { erro: 'Imagem muito grande' });
+      res.writeHead(200, { 'content-type': r.headers.get('content-type') || 'image/jpeg' });
+      return res.end(buf);
+    }
     if (req.method === 'POST' && url.pathname === '/api/produto') {
       const b = await body(req);
       return send(res, 200, await buscarProduto(String(b.link || '')));

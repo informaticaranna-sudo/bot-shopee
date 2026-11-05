@@ -29,6 +29,7 @@ button.wa{background:var(--wa)}
 button.sm{padding:6px 10px;font-size:13px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .linkrow{display:flex;gap:8px}.linkrow input{flex:1}
+.foto{display:block;max-width:140px;max-height:140px;border-radius:10px;margin:0 0 10px;border:1px solid var(--line)}
 .bubble{background:var(--chat);color:var(--chat-ink);border-radius:12px 12px 12px 2px;padding:12px 14px;white-space:pre-wrap;word-break:break-word;font-size:15px;min-height:120px}
 .off{display:inline-block;background:var(--brand);color:#fff;border-radius:99px;padding:1px 10px;font-weight:700;font-size:13px;margin-left:6px}
 .msg{font-size:14px;margin-top:8px;min-height:20px;color:var(--mute)}.msg.err{color:var(--err)}
@@ -97,13 +98,14 @@ summary{cursor:pointer;font-weight:700;font-size:18px}
 
   <section class="card">
     <h2>Prévia da mensagem <span id="off"></span></h2>
+    <img id="foto" class="foto" alt="Foto do produto" hidden>
     <div class="bubble" id="prev">Cole um link para ver a mensagem.</div>
     <div class="actions">
       <button id="outra" class="alt">Outra chamada</button>
       <button id="copiar" class="alt">Copiar</button>
-      <button id="enviar" class="wa">Enviar no WhatsApp</button>
+      <button id="enviar" class="wa">Enviar com foto no WhatsApp</button>
     </div>
-    <p class="note">O WhatsApp abre com o texto pronto e você escolhe o grupo.</p>
+    <p class="note">No celular, a foto e o texto vão juntos para o WhatsApp e você escolhe o grupo. No computador, a foto é baixada e o texto é copiado para você anexar.</p>
   </section>
 </div>
 
@@ -113,7 +115,7 @@ summary{cursor:pointer;font-weight:700;font-size:18px}
   <div class="actions">
     <button id="todas" class="wa">Enviar todas de uma vez</button>
     <button id="copiarTodas" class="alt">Copiar todas</button>
-    <button id="prox" class="alt">Enviar só a próxima</button>
+    <button id="prox" class="alt">Enviar só a próxima (com foto)</button>
     <button id="zerar" class="alt">Esvaziar fila</button>
   </div>
   <p class="note">"Enviar todas de uma vez" junta as promoções numa única mensagem, separadas por uma linha. O WhatsApp não permite mandar várias mensagens separadas com um só toque.</p>
@@ -125,7 +127,7 @@ summary{cursor:pointer;font-weight:700;font-size:18px}
 const GANCHOS=["AGORA SIM SUA CASA VAI FICAR MUITO CHEIROSA","ACHADINHO IMPERDÍVEL DE HOJE","CORRE QUE ESTÁ NO PREÇO MÍNIMO","OLHA ESSE PREÇO, GENTE","PROMOÇÃO RELÂMPAGO NA SHOPEE","VALE MUITO A PENA GARANTIR O SEU","ESSA OFERTA NÃO VAI DURAR","PRA ECONOMIZAR SEM PERDER QUALIDADE","ESTOQUE VOANDO, APROVEITA","MAIS UM ACHADO PRA VOCÊS"];
 const $=id=>document.getElementById(id);
 const CAMPOS=["link","nome","de","por","gancho"];
-let fila=[],idx=0,gIdx=0,senha="";
+let fila=[],idx=0,gIdx=0,senha="",fotoUrl="";
 try{fila=JSON.parse(localStorage.getItem("fila")||"[]");senha=sessionStorage.getItem("senha")||""}catch(e){}
 const salvar=()=>{try{localStorage.setItem("fila",JSON.stringify(fila))}catch(e){}};
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");setTimeout(()=>e.classList.remove("on"),1800)}
@@ -162,7 +164,7 @@ $("salvarCfg").onclick=async()=>{
 
 const num=s=>parseFloat(String(s).replace(/\./g,"").replace(",","."));
 const montar=(p,g)=>`${g}\n\n> 🛍️ ${p.nome}\n\n❌️De:${p.de}\n💰Por: ${p.por} 😱\n\n🛒 Compre  aqui: \n${p.link}`;
-const atual=()=>({nome:$("nome").value.trim(),de:$("de").value.trim(),por:$("por").value.trim(),link:$("link").value.trim(),gancho:$("gancho").value.trim()});
+const atual=()=>({imagem:fotoUrl,nome:$("nome").value.trim(),de:$("de").value.trim(),por:$("por").value.trim(),link:$("link").value.trim(),gancho:$("gancho").value.trim()});
 const gancho=p=>(p.gancho||GANCHOS[gIdx%GANCHOS.length]).toUpperCase();
 function prever(){
   const p=atual();
@@ -178,6 +180,7 @@ async function buscar(){
   try{
     const p=await api("/api/produto",{link:l});
     $("nome").value=p.nome;$("de").value=p.de;$("por").value=p.por;$("link").value=p.link;
+    fotoUrl=p.imagem||"";mostrarFoto();
     msg("buscaMsg","Dados preenchidos"+(p.loja?" ("+p.loja+")":"")+".");
     prever();
   }catch(e){msg("buscaMsg",e.message,true)}
@@ -187,17 +190,39 @@ $("buscar").onclick=buscar;
 $("link").addEventListener("paste",()=>setTimeout(buscar,50));
 ["nome","de","por","gancho"].forEach(id=>$(id).addEventListener("input",prever));
 
+function mostrarFoto(){const f=$("foto");if(fotoUrl){f.src=fotoUrl;f.hidden=false}else{f.removeAttribute("src");f.hidden=true}}
+async function enviarComFoto(texto,img){
+  if(!img){abrirWA(texto);return}
+  try{
+    const r=await fetch("/api/imagem?u="+encodeURIComponent(img),{headers:{"x-panel-password":senha}});
+    if(!r.ok)throw new Error("img");
+    const b=await r.blob();
+    const f=new File([b],"produto.jpg",{type:b.type||"image/jpeg"});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){
+      await copiarTexto(texto);
+      await navigator.share({files:[f],text:texto});
+      toast("Se o texto não aparecer na legenda, cole (já está copiado)");
+      return;
+    }
+    const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="produto.jpg";a.click();
+    await copiarTexto(texto);
+    toast("Foto baixada e texto copiado. Anexe a foto no grupo e cole o texto");
+  }catch(e){
+    if(e&&e.name==="AbortError")return;
+    abrirWA(texto);toast("Não consegui anexar a foto. Abri só com o texto");
+  }
+}
 function abrirWA(t){window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank","noopener")}
 function validar(p){if(!p.nome||!p.de||!p.por||!/^https?:\/\//.test(p.link)){toast("Cole um link e busque os dados primeiro");return false}return true}
 $("outra").onclick=()=>{gIdx++;$("gancho").value="";prever()};
 $("copiar").onclick=async()=>{const p=atual();if(!validar(p))return;try{await navigator.clipboard.writeText(montar(p,gancho(p)));toast("Mensagem copiada")}catch(e){toast("Não foi possível copiar")}};
-$("enviar").onclick=()=>{const p=atual();if(!validar(p))return;abrirWA(montar(p,gancho(p)))};
-$("add").onclick=()=>{const p=atual();if(!validar(p))return;fila.push(p);salvar();desenhar();CAMPOS.forEach(i=>$(i).value="");msg("buscaMsg","");gIdx++;prever();toast("Adicionada à fila")};
-$("limpar").onclick=()=>{CAMPOS.forEach(i=>$(i).value="");msg("buscaMsg","");prever()};
+$("enviar").onclick=()=>{const p=atual();if(!validar(p))return;enviarComFoto(montar(p,gancho(p)),p.imagem)};
+$("add").onclick=()=>{const p=atual();if(!validar(p))return;fila.push(p);salvar();desenhar();CAMPOS.forEach(i=>$(i).value="");fotoUrl="";mostrarFoto();msg("buscaMsg","");gIdx++;prever();toast("Adicionada à fila")};
+$("limpar").onclick=()=>{fotoUrl="";mostrarFoto();CAMPOS.forEach(i=>$(i).value="");msg("buscaMsg","");prever()};
 $("prox").onclick=()=>{
   if(!fila.length){toast("A fila está vazia");return}
   const i=idx%fila.length,p=fila[i];
-  abrirWA(montar(p,(p.gancho||GANCHOS[(i+gIdx)%GANCHOS.length]).toUpperCase()));
+  enviarComFoto(montar(p,(p.gancho||GANCHOS[(i+gIdx)%GANCHOS.length]).toUpperCase()),p.imagem);
   idx=(i+1)%fila.length;desenhar();
 };
 const SEP="\n\n━━━━━━━━━━━━\n\n";
