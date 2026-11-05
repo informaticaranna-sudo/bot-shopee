@@ -1,0 +1,8 @@
+{
+  "name": "bot-promo-shopee",
+  "version": "1.0.0",
+  "description": "Painel de promoções Shopee com preenchimento automático pelo link",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
