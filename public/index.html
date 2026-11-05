@@ -111,9 +111,12 @@ summary{cursor:pointer;font-weight:700;font-size:18px}
   <h2>Fila de promoções</h2>
   <ul id="lista"></ul>
   <div class="actions">
-    <button id="prox" class="wa">Enviar a próxima da fila</button>
+    <button id="todas" class="wa">Enviar todas de uma vez</button>
+    <button id="copiarTodas" class="alt">Copiar todas</button>
+    <button id="prox" class="alt">Enviar só a próxima</button>
     <button id="zerar" class="alt">Esvaziar fila</button>
   </div>
+  <p class="note">"Enviar todas de uma vez" junta as promoções numa única mensagem, separadas por uma linha. O WhatsApp não permite mandar várias mensagens separadas com um só toque.</p>
 </section>
 </main>
 <div id="toast" role="status"></div>
@@ -196,6 +199,22 @@ $("prox").onclick=()=>{
   const i=idx%fila.length,p=fila[i];
   abrirWA(montar(p,(p.gancho||GANCHOS[(i+gIdx)%GANCHOS.length]).toUpperCase()));
   idx=(i+1)%fila.length;desenhar();
+};
+const SEP="\n\n━━━━━━━━━━━━\n\n";
+const montarTodas=()=>fila.map((p,i)=>montar(p,(p.gancho||GANCHOS[(i+gIdx)%GANCHOS.length]).toUpperCase())).join(SEP);
+async function copiarTexto(t){try{await navigator.clipboard.writeText(t);return true}catch(e){return false}}
+$("todas").onclick=async()=>{
+  if(!fila.length){toast("A fila está vazia");return}
+  const t=montarTodas();
+  if(encodeURIComponent(t).length>6000){
+    toast(await copiarTexto(t)?"Fila grande demais para o link: copiada, cole no grupo":"Fila grande demais. Envie em partes");
+    return;
+  }
+  abrirWA(t);
+};
+$("copiarTodas").onclick=async()=>{
+  if(!fila.length){toast("A fila está vazia");return}
+  toast(await copiarTexto(montarTodas())?"Fila copiada":"Não foi possível copiar");
 };
 $("zerar").onclick=()=>{fila=[];idx=0;salvar();desenhar()};
 function desenhar(){
